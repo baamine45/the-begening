@@ -1,14 +1,21 @@
 
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
 function GroomDashboard() {
+  const navigate = useNavigate();
+
   // ============================================
   // 1. حالات التحقق من صلاحية العريس
   // ============================================
   const [checking, setChecking] = useState(true);
   const [isGroom, setIsGroom] = useState(false);
   const [error, setError] = useState("");
+
+  // حالة تسجيل الخروج
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
 
   // ============================================
   // 2. حالات الرسائل المعتمدة
@@ -20,15 +27,44 @@ function GroomDashboard() {
   // ============================================
   // 3. حالات تغيير خصوصية الرسائل
   // ============================================
+  const [updatingMessageId, setUpdatingMessageId] =
+    useState(null);
 
-  // معرّف الرسالة التي يجري تحديث خصوصيتها
-  const [updatingMessageId, setUpdatingMessageId] = useState(null);
-
-  // رسالة توضح نتيجة العملية
-  const [visibilityMessage, setVisibilityMessage] = useState("");
+  const [visibilityMessage, setVisibilityMessage] =
+    useState("");
 
   // ============================================
-  // 4. جلب بيانات مساحة العريس
+  // 4. تسجيل الخروج
+  // ============================================
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutError("");
+
+    try {
+      // إنهاء جلسة المستخدم في Supabase
+      const { error: signOutError } =
+        await supabase.auth.signOut();
+
+      if (signOutError) {
+        console.error("Logout error:", signOutError);
+        setLogoutError("تعذر تسجيل الخروج. حاول مرة أخرى.");
+        return;
+      }
+
+      // العودة إلى صفحة تسجيل الدخول
+      navigate("/groom-login", { replace: true });
+    } catch (err) {
+      console.error("Unexpected logout error:", err);
+      setLogoutError("حدث خطأ غير متوقع أثناء تسجيل الخروج.");
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
+  // ============================================
+  // 5. جلب بيانات مساحة العريس
   // ============================================
   useEffect(() => {
     let mounted = true;
@@ -38,12 +74,11 @@ function GroomDashboard() {
       setError("");
 
       try {
-        // التحقق من وجود مستخدم مسجل الدخول
+        // التأكد من وجود مستخدم مسجل الدخول
         const {
           data: { user },
           error: userError,
         } = await supabase.auth.getUser();
-        console.log("Current user ID:", user?.id);
 
         if (userError || !user) {
           if (mounted) {
@@ -61,7 +96,10 @@ function GroomDashboard() {
         } = await supabase.rpc("is_groom");
 
         if (permissionError) {
-          console.error("Groom permission error:", permissionError);
+          console.error(
+            "Groom permission error:",
+            permissionError
+          );
 
           if (mounted) {
             setError("تعذر التحقق من صلاحيات الحساب.");
@@ -77,14 +115,13 @@ function GroomDashboard() {
         setIsGroom(permission === true);
         setChecking(false);
 
-        // لا نجلب الرسائل إذا لم يكن الحساب حساب العريس
+        // لا نجلب الرسائل إذا لم يكن الحساب مصرحًا له
         if (permission !== true) {
           setMessagesLoading(false);
           return;
         }
 
         // جلب الرسائل المعتمدة فقط
-        // ستسمح سياسة RLS للعريس برؤية الرسائل المعتمدة
         setMessagesLoading(true);
         setMessagesError("");
 
@@ -93,27 +130,77 @@ function GroomDashboard() {
           error: fetchError,
         } = await supabase
           .from("contributions")
-          .select(`
-            id,
-            message,
-            memory,
-            created_at,
-            visibility,
-            contributors (
-              name
-            )
-          `)
+         
+.select(`
+  id,
+  message,
+  memory,
+  photo_url,
+  audio_url,
+  created_at,
+  visibility,
+  contributors (
+    name
+  )
+`)
+
           .eq("status", "approved")
           .order("created_at", { ascending: false });
 
         if (!mounted) return;
 
-        if (fetchError) {
-          console.error("Messages fetch error:", fetchError);
-          setMessagesError("تعذر تحميل الرسائل المعتمدة.");
+        
+if (fetchError) {
+  console.error("Messages fetch error:", fetchError);
+  setMessagesError("تعذر تحميل الرسائل المعتمدة.");
+} else {
+  // إنشاء روابط مؤقتة للصور والتسجيلات الصوتية
+  const messagesWithMedia = await Promise.all(
+    (approvedMessages || []).map(async (item) => {
+      let photoSignedUrl = null;
+      let audioSignedUrl = null;
+
+      // إنشاء رابط مؤقت للصورة إن وجدت
+      if (item.photo_url) {
+        const { data, error } = await supabase.storage
+          .from("contribution-media")
+          .createSignedUrl(item.photo_url, 3600);
+          console.log("اختبار رابط الصورة:", {
+  path: item.photo_url,
+  error: error?.message,
+  urlCreated: Boolean(data?.signedUrl),
+});
+        if (error) {
+          console.error("خطأ رابط الصورة:", error);
         } else {
-          setMessages(approvedMessages || []);
+          photoSignedUrl = data.signedUrl;
         }
+      }
+
+      // إنشاء رابط مؤقت للصوت إن وجد
+      if (item.audio_url) {
+        const { data, error } = await supabase.storage
+          .from("contribution-media")
+          .createSignedUrl(item.audio_url, 3600);
+
+        if (error) {
+          console.error("خطأ رابط الصوت:", error);
+        } else {
+          audioSignedUrl = data.signedUrl;
+        }
+      }
+
+      return {
+        ...item,
+        photoSignedUrl,
+        audioSignedUrl,
+      };
+    })
+  );
+
+  setMessages(messagesWithMedia);
+}
+
 
         setMessagesLoading(false);
       } catch (err) {
@@ -135,7 +222,7 @@ function GroomDashboard() {
   }, []);
 
   // ============================================
-  // 5. تغيير خصوصية الرسالة
+  // 6. تغيير خصوصية الرسالة
   // ============================================
   const changeVisibility = async (messageId, newVisibility) => {
     // منع الضغط المتكرر أثناء تنفيذ العملية
@@ -145,7 +232,7 @@ function GroomDashboard() {
     setVisibilityMessage("");
 
     try {
-      // استدعاء الوظيفة الآمنة التي أنشأناها في Supabase
+      // تنفيذ التغيير من خلال وظيفة Supabase الآمنة
       const { data, error: updateError } = await supabase.rpc(
         "set_contribution_visibility",
         {
@@ -160,7 +247,7 @@ function GroomDashboard() {
         return;
       }
 
-      // إذا لم تُحدّث أي رسالة معتمدة، فلا نغيّر الواجهة
+      // التحقق من تحديث الرسالة بنجاح
       if (data !== true) {
         setVisibilityMessage(
           "لم يتم العثور على رسالة معتمدة لتحديثها."
@@ -168,7 +255,7 @@ function GroomDashboard() {
         return;
       }
 
-      // تحديث حالة الرسالة في الواجهة دون إعادة تحميل الصفحة
+      // تحديث الواجهة دون إعادة تحميل الصفحة
       setMessages((currentMessages) =>
         currentMessages.map((item) =>
           item.id === messageId
@@ -193,7 +280,7 @@ function GroomDashboard() {
   };
 
   // ============================================
-  // 6. شاشة التحقق من الصلاحية
+  // 7. شاشة التحقق من الصلاحية
   // ============================================
   if (checking) {
     return (
@@ -207,7 +294,7 @@ function GroomDashboard() {
   }
 
   // ============================================
-  // 7. منع الوصول لغير العريس
+  // 8. منع الوصول لغير العريس
   // ============================================
   if (!isGroom) {
     return (
@@ -228,12 +315,20 @@ function GroomDashboard() {
             {error}
           </p>
         )}
+
+        <button
+          type="button"
+          onClick={() => navigate("/groom-login", { replace: true })}
+          className="mt-6 border border-[#252525]/20 px-5 py-3 text-sm transition hover:bg-[#C9A96E] hover:text-white"
+        >
+          الذهاب إلى تسجيل الدخول
+        </button>
       </main>
     );
   }
 
   // ============================================
-  // 8. مساحة العريس
+  // 9. مساحة العريس
   // ============================================
   return (
     <main
@@ -241,6 +336,27 @@ function GroomDashboard() {
       className="min-h-screen bg-[#F8F5F0] px-6 py-24 text-[#252525]"
     >
       <div className="mx-auto max-w-5xl">
+        {/* زر تسجيل الخروج */}
+        <div className="mb-8 flex justify-end">
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="border border-[#252525]/20 px-5 py-3 text-sm transition hover:bg-[#C9A96E] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loggingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
+          </button>
+        </div>
+
+        {logoutError && (
+          <p
+            role="alert"
+            className="mb-6 text-sm leading-loose text-red-600"
+          >
+            {logoutError}
+          </p>
+        )}
+
         <p className="text-sm tracking-[0.2em] text-[#C9A96E]">
           17 — البداية
         </p>
@@ -269,7 +385,7 @@ function GroomDashboard() {
             هذا اليوم وبداية فصل جديد من حياتك.
           </p>
 
-          {/* عرض نتيجة آخر عملية لتغيير الخصوصية */}
+          {/* نتيجة آخر عملية لتغيير الخصوصية */}
           {visibilityMessage && (
             <p
               role="status"
@@ -303,10 +419,10 @@ function GroomDashboard() {
           ) : (
             <div className="mt-8 space-y-6">
               {messages.map((item) => {
-                // معرفة ما إذا كانت هذه الرسالة قيد التحديث
+                // هل يجري تحديث هذه الرسالة؟
                 const isUpdating = updatingMessageId === item.id;
 
-                // تحديد ما إذا كانت الرسالة متاحة للزوار
+                // هل الرسالة متاحة للزوار؟
                 const isPublic = item.visibility === "public";
 
                 return (
@@ -334,13 +450,53 @@ function GroomDashboard() {
                       </div>
                     )}
 
+{/* عرض الصورة المرفقة */}
+{item.photoSignedUrl && (
+  <div className="mt-5">
+    <p className="mb-3 text-sm text-[#C9A96E]">
+      الصورة المرفقة
+    </p>
+
+    <a
+      href={item.photoSignedUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      <img
+        src={item.photoSignedUrl}
+        alt="صورة من إحدى الذكريات"
+        className="max-h-80 w-auto max-w-full rounded-lg object-contain"
+        loading="lazy"
+      />
+    </a>
+  </div>
+)}
+
+{/* مشغّل التسجيل الصوتي */}
+{item.audioSignedUrl && (
+  <div className="mt-5">
+    <p className="mb-3 text-sm text-[#C9A96E]">
+      التسجيل الصوتي
+    </p>
+
+    <audio
+      controls
+      preload="metadata"
+      src={item.audioSignedUrl}
+      className="w-full"
+    >
+      متصفحك لا يدعم تشغيل الصوت.
+    </audio>
+  </div>
+)}
+
                     <div className="mt-6 border-t border-[#252525]/10 pt-4">
                       <p className="text-sm text-[#C9A96E]">
                         — {item.contributors?.name || "من أحد الأصدقاء"}
                       </p>
                     </div>
 
-                    {/* حالة الخصوصية الحالية */}
+                    {/* حالة الخصوصية وأزرار التحكم */}
                     <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
                       <p className="text-sm text-gray-500">
                         {isPublic
@@ -348,10 +504,11 @@ function GroomDashboard() {
                           : "هذه الرسالة خاصة بك"}
                       </p>
 
-                      {/* زر تغيير الخصوصية */}
                       <button
                         type="button"
-                        disabled={isUpdating || updatingMessageId !== null}
+                        disabled={
+                          isUpdating || updatingMessageId !== null
+                        }
                         onClick={() =>
                           changeVisibility(
                             item.id,

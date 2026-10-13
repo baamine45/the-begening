@@ -1,202 +1,980 @@
-// نستورد بيانات السنوات والصور
+
+
+import { useEffect, useState } from "react";
+
 import timelineData from "../../data/timelineData";
 
+import { supabase } from "../../lib/supabase";
+
+
+
+const BUCKET_NAME = "timeline-photos";
+
+
+
 function Timeline() {
+
+  const [items, setItems] = useState(timelineData);
+
+  const [loading, setLoading] = useState(true);
+
+  const [loadError, setLoadError] = useState("");
+
+  const [lightbox, setLightbox] = useState(null);
+  // التعليقات مرتبطة بمعرّف الصورة المحفوظة في Supabase فقط.
+  const [user, setUser] = useState(null);
+  const [comments, setComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [contributorName, setContributorName] = useState("");
+  const [contributorLoading, setContributorLoading] = useState(false);
+  const [commentError, setCommentError] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+
+
+
+  // تحميل الذكريات المنشورة من Supabase.
+
+  useEffect(() => {
+
+    let active = true;
+
+
+
+    async function loadMemories() {
+
+      setLoading(true);
+
+      setLoadError("");
+
+
+
+      try {
+
+        const { data: memories, error: memoriesError } = await supabase
+
+          .from("timeline_memories")
+
+          .select(
+
+            "id, section, year_label, title, description, sort_order, created_at"
+
+          )
+
+          .eq("is_published", true)
+
+          .order("section", { ascending: true })
+
+          .order("sort_order", { ascending: true })
+
+          .order("created_at", { ascending: true });
+
+
+
+        if (memoriesError) throw memoriesError;
+
+
+
+        if (!memories || memories.length === 0) {
+
+          if (active) setItems(timelineData);
+
+          return;
+
+        }
+
+
+
+        // تحميل الصور التابعة للذكريات المنشورة.
+
+        const { data: photos, error: photosError } = await supabase
+
+          .from("timeline_photos")
+
+          .select("id, memory_id, storage_path, alt_text, sort_order")
+
+          .order("sort_order", { ascending: true });
+
+
+
+        if (photosError) throw photosError;
+
+
+
+        const photosByMemory = {};
+
+
+
+        for (const photo of photos ?? []) {
+
+          const { data: signedData, error: signedError } =
+
+            await supabase.storage
+
+              .from(BUCKET_NAME)
+
+              .createSignedUrl(photo.storage_path, 60 * 60);
+
+
+
+          if (signedError || !signedData?.signedUrl) {
+
+            console.error("تعذر تحميل الصورة:", signedError);
+
+            continue;
+
+          }
+
+
+
+          if (!photosByMemory[photo.memory_id]) {
+
+            photosByMemory[photo.memory_id] = [];
+
+          }
+
+
+
+          photosByMemory[photo.memory_id].push({
+
+            id: photo.id,
+
+            url: signedData.signedUrl,
+
+            alt_text: photo.alt_text || "",
+
+            // نميّز صور Supabase عن الصور المحلية حتى نحمّل تعليقاتها فقط.
+
+            isDatabasePhoto: true,
+
+          });
+
+        }
+
+
+
+        // السنة هنا اختيارية؛ إذا كانت فارغة نحفظها كسلسلة فارغة.
+
+        const databaseItems = memories.map((memory) => ({
+
+          id: memory.id,
+
+          year: memory.year_label || "",
+
+          title: memory.title,
+
+          description: memory.description || "",
+
+          images: photosByMemory[memory.id] || [],
+
+        }));
+
+
+
+        // نحتفظ بالذكريات المحلية التي لا توجد لها سنة مقابلة
+
+        // في البيانات المنشورة، دون الاعتماد على سنة فارغة.
+
+        const databaseYears = new Set(
+
+          databaseItems
+
+            .map((item) => item.year.trim())
+
+            .filter(Boolean)
+
+        );
+
+
+
+        const localItems = timelineData.filter((item) => {
+
+          const localYear = String(item.year || "").trim();
+
+          return !localYear || !databaseYears.has(localYear);
+
+        });
+
+
+
+        if (active) {
+
+          setItems([...localItems, ...databaseItems]);
+
+        }
+
+      } catch (error) {
+
+        console.error("خطأ في تحميل الذكريات:", error);
+
+
+
+        if (active) {
+
+          setLoadError(
+
+            "تعذر تحميل بعض الذكريات. نعرض البيانات المحلية المتاحة."
+
+          );
+
+          setItems(timelineData);
+
+        }
+
+      } finally {
+
+        if (active) setLoading(false);
+
+      }
+
+    }
+
+
+
+    loadMemories();
+
+
+
+    return () => {
+
+      active = false;
+
+    };
+
+  }, []);
+
+
+
+  // دعم الصور المحلية وصور Supabase معًا.
+
+  function normalizeImages(images, title) {
+
+    return (images || []).map((image, index) => {
+
+      if (typeof image === "string") {
+
+        return {
+
+          id: `${title}-${index}`,
+
+          url: image,
+
+          alt_text: `${title} - صورة ${index + 1}`,
+
+        };
+
+      }
+
+
+
+      return {
+
+        ...image,
+
+        alt_text: image.alt_text || `${title} - صورة ${index + 1}`,
+
+      };
+
+    });
+
+  }
+
+
+
+  // متابعة حالة تسجيل الدخول دون إنشاء نظام حسابات جديد.
+  useEffect(() => {
+    let active = true;
+    supabase.auth.getUser().then(({ data }) => {
+      if (active) setUser(data?.user ?? null);
+    });
+    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => {
+      active = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  // جلب اسم المشارك تلقائيًا من جدول contributors بعد تسجيل الدخول.
+  // لا نسمح بالتعليق لمجرد تسجيل الدخول؛ يجب وجود سجل مشارك مرتبط بالحساب.
+  useEffect(() => {
+    let active = true;
+
+    async function loadContributor() {
+      setContributorName("");
+      if (!user) {
+        setContributorLoading(false);
+        return;
+      }
+
+      setContributorLoading(true);
+      const { data, error } = await supabase
+        .from("contributors")
+        .select("name")
+        .eq("auth_user_id", user.id)
+        .maybeSingle();
+
+      if (!active) return;
+
+      if (error) {
+        console.error("تعذر تحميل اسم المشارك:", error);
+        setCommentError("تعذر التحقق من حساب المشارك. حاول تحديث الصفحة.");
+        setContributorName("");
+      } else {
+        setContributorName(data?.name?.trim() || "");
+      }
+      setContributorLoading(false);
+    }
+
+    loadContributor();
+    return () => { active = false; };
+  }, [user]);
+
+  // تحميل تعليقات الصورة المفتوحة كلما انتقل المستخدم إلى صورة أخرى.
+  const activePhoto = lightbox?.images?.[lightbox.index];
+  const activePhotoId = activePhoto?.isDatabasePhoto ? activePhoto.id : null;
+
+  useEffect(() => {
+    let active = true;
+    setComments([]);
+    setCommentText("");
+    setCommentError("");
+    if (!activePhotoId) {
+      setCommentsLoading(false);
+      return;
+    }
+    setCommentsLoading(true);
+    supabase.from("timeline_comments")
+      .select("id, photo_id, author_name, content, created_at")
+      .eq("photo_id", activePhotoId)
+      .order("created_at", { ascending: true })
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) setCommentError("تعذر تحميل التعليقات: " + error.message);
+        else setComments(data ?? []);
+        setCommentsLoading(false);
+      });
+    return () => { active = false; };
+  }, [activePhotoId]);
+
+  async function submitComment(event) {
+    event.preventDefault();
+    const content = commentText.trim();
+    const name = contributorName.trim();
+    if (!user || !activePhotoId || !name) {
+      setCommentError("يجب تسجيل الدخول بحساب مشارك معتمد لإضافة تعليق.");
+      return;
+    }
+    if (!content || content.length > 1000) {
+      setCommentError("أدخل تعليقًا من 1 إلى 1000 حرف.");
+      return;
+    }
+    setSendingComment(true);
+    setCommentError("");
+    const photoId = activePhotoId;
+    const { error } = await supabase.from("timeline_comments").insert({
+      photo_id: photoId,
+      user_id: user.id,
+      author_name: name,
+      content,
+    });
+    if (error) {
+      setCommentError("تعذر إرسال التعليق: " + error.message);
+    } else {
+      setCommentText("");
+      const { data, error: reloadError } = await supabase.from("timeline_comments")
+        .select("id, photo_id, author_name, content, created_at")
+        .eq("photo_id", photoId)
+        .order("created_at", { ascending: true });
+      if (reloadError) setCommentError("تم الإرسال، لكن تعذر تحديث التعليقات.");
+      else if (activePhotoId === photoId) setComments(data ?? []);
+    }
+    setSendingComment(false);
+  }
+
+  // إغلاق نافذة الصور والتنقل باستخدام لوحة المفاتيح.
+
+  useEffect(() => {
+
+    function handleKeyDown(event) {
+
+      if (event.key === "Escape") {
+
+        setLightbox(null);
+
+        return;
+
+      }
+
+
+
+      if (!lightbox || lightbox.images.length < 2) return;
+
+
+
+      if (event.key === "ArrowRight") {
+
+        setLightbox((current) => ({
+
+          ...current,
+
+          index: (current.index + 1) % current.images.length,
+
+        }));
+
+      }
+
+
+
+      if (event.key === "ArrowLeft") {
+
+        setLightbox((current) => ({
+
+          ...current,
+
+          index:
+
+            (current.index - 1 + current.images.length) %
+
+            current.images.length,
+
+        }));
+
+      }
+
+    }
+
+
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => window.removeEventListener("keydown", handleKeyDown);
+
+  }, [lightbox]);
+
+
+
+  function moveImage(direction) {
+
+    setLightbox((current) => ({
+
+      ...current,
+
+      index:
+
+        (current.index + direction + current.images.length) %
+
+        current.images.length,
+
+    }));
+
+  }
+
+
+
   return (
-    <section
-      className="
-        bg-[#171717]
-        text-white
-        py-32
-        px-6
-        overflow-hidden
-      "
-    >
-      {/* عنوان قسم الخط الزمني */}
-      <div className="text-center max-w-2xl mx-auto mb-24">
-        <p
-          className="
-            text-[#C9A96E]
-            text-sm
-            tracking-[0.2em]
-            mb-6
-          "
-        >
-          رحلتنا
+
+    <section className="relative overflow-hidden bg-[#171717] px-5 py-24 text-white md:px-8 md:py-32">
+
+      {/* خلفية بسيطة بلمسات ذهبية */}
+
+      <div className="pointer-events-none absolute -top-40 left-0 h-96 w-96 rounded-full bg-[#C9A96E]/5 blur-3xl" />
+
+
+
+      {/* مقدمة القسم */}
+
+      <header className="relative mx-auto mb-16 max-w-3xl text-center md:mb-24">
+
+        <p className="mb-5 text-xs tracking-[0.35em] text-[#C9A96E] md:text-sm">
+
+          حكايتنا المشتركة
+
         </p>
 
-        <h2
-          className="
-            text-4xl
-            md:text-6xl
-            font-light
-          "
-        >
-          سنوات أصبحت ذكريات
+
+
+        <h2 className="text-4xl font-light leading-tight md:text-6xl">
+
+          ذكريات
+
+          <span className="mt-2 block text-[#C9A96E]">
+
+            تبقى معنا
+
+          </span>
+
         </h2>
-      </div>
 
-      {/* الحاوية الرئيسية للـ Timeline */}
-      <div className="max-w-5xl mx-auto relative">
 
-        {/* الخط العمودي */}
-        <div
-          className="
-            absolute
-            right-4
-            md:right-1/2
-            top-0
-            bottom-0
-            w-px
-            bg-[#C9A96E]/30
-            md:-translate-x-1/2
-          "
-        />
 
-        {/* نمر على السنوات */}
-        {timelineData.map((item, index) => {
+        <div className="mx-auto mt-7 h-px w-16 bg-[#C9A96E]/70" />
 
-          // نحدد هل المحطة زوجية أم فردية
-          const isEven = index % 2 === 0;
+
+
+        <p className="mx-auto mt-6 max-w-xl text-sm leading-8 text-gray-400 md:text-base">
+
+          لحظات جمعتنا، وحكايات صنعت صداقتنا، وصور تحفظ أجمل ما عشنا.
+
+        </p>
+
+
+
+        {loading && (
+
+          <p className="mt-5 text-sm text-gray-400">
+
+            جارٍ تحميل الذكريات...
+
+          </p>
+
+        )}
+
+
+
+        {loadError && (
+
+          <p role="status" className="mt-5 text-sm text-amber-300">
+
+            {loadError}
+
+          </p>
+
+        )}
+
+      </header>
+
+
+
+      {/* بطاقات مستقلة، دون خط زمني عمودي */}
+
+      <div className="relative mx-auto max-w-5xl space-y-12 md:space-y-16">
+
+        {items.map((item, index) => {
+
+          const images = normalizeImages(item.images, item.title);
+
+          const year = String(item.year || "").trim();
+
+
 
           return (
-            <div
-              key={item.year}
-              className="
-                relative
-                mb-32
-                min-h-[300px]
-              "
+
+            <article
+
+              key={item.id || `${item.title}-${index}`}
+
+              className="overflow-hidden rounded-2xl border border-white/10 bg-[#1D1D1D] shadow-xl shadow-black/10 transition-colors duration-500 hover:border-[#C9A96E]/30 md:rounded-3xl"
+
             >
 
-              {/* الدائرة الموجودة على الخط */}
-              <div
-                className="
-                  absolute
-                  right-4
-                  md:right-1/2
-                  top-6
-                  w-4
-                  h-4
-                  rounded-full
-                  bg-[#C9A96E]
-                  border-4
-                  border-[#171717]
-                  md:-translate-x-1/2
-                  z-20
-                "
-              />
+              {/* الصور في أعلى البطاقة */}
 
-              {/* محتوى السنة */}
-              <div
-                className={`
-                  pr-14
-                  md:pr-0
-                  md:w-1/2
+              {images.length > 0 && (
 
-                  ${
-                    isEven
-                      ? "md:ml-0 md:mr-auto md:pr-12"
-                      : "md:ml-auto md:mr-0 md:pl-12"
-                  }
-                `}
-              >
+                <div className="grid grid-cols-2 gap-1.5 bg-black/20 p-1.5 md:gap-2 md:p-2">
 
-                {/* السنة */}
-                <p
-                  dir="ltr"
-                  className="
-                    text-[#C9A96E]
-                    text-lg
-                    md:text-xl
-                    mb-4
-                    font-light
-                  "
-                >
-                  {item.year}
-                </p>
+                  {images.slice(0, 4).map((image, imageIndex) => {
 
-                {/* --------------------------------
-                    معرض الصور
-                    -------------------------------- */}
-                <div
-                  className="
-                    grid
-                    grid-cols-2
-                    gap-3
-                    mb-8
-                  "
-                >
+                    // الصورة الأولى أكبر، والبقية تكمل المعرض.
 
-                  {/* نمر على صور السنة */}
-                  {item.images.map((image, imageIndex) => (
+                    const featured = imageIndex === 0;
 
-                    <div
-                      key={imageIndex}
-                      className={`
-                        overflow-hidden
-                        rounded-2xl
-                        border
-                        border-white/10
-                        bg-white/5
 
-                        ${
-                          imageIndex === 0
-                            ? "col-span-2 h-64"
-                            : "h-40"
+
+                    return (
+
+                      <button
+
+                        key={image.id || `${item.title}-${imageIndex}`}
+
+                        type="button"
+
+                        onClick={() =>
+
+                          setLightbox({
+
+                            images,
+
+                            index: imageIndex,
+
+                            title: item.title,
+
+                          })
+
                         }
-                      `}
+
+                        aria-label={`فتح الصورة ${imageIndex + 1} من ${item.title}`}
+
+                        className={`group relative overflow-hidden rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-[#C9A96E] md:rounded-xl ${
+
+                          featured
+
+                            ? "col-span-2 aspect-[16/9] md:col-span-1 md:row-span-2 md:aspect-auto md:min-h-[360px]"
+
+                            : "aspect-[4/3] md:aspect-[5/4]"
+
+                        }`}
+
+                      >
+
+                        <img
+
+                          src={image.url}
+
+                          alt={image.alt_text}
+
+                          loading="lazy"
+
+                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
+
+                        />
+
+
+
+                        <span className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
+
+
+
+                        <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
+
+                          <svg
+
+                            viewBox="0 0 24 24"
+
+                            fill="none"
+
+                            stroke="currentColor"
+
+                            strokeWidth="1.5"
+
+                            className="h-5 w-5"
+
+                            aria-hidden="true"
+
+                          >
+
+                            <circle cx="11" cy="11" r="6.5" />
+
+                            <path d="m16 16 4 4 M11 8v6 M8 11h6" />
+
+                          </svg>
+
+                        </span>
+
+                      </button>
+
+                    );
+
+                  })}
+
+
+
+                  {/* إذا كانت هناك صور إضافية، نفتح المعرض من آخر صورة ظاهرة */}
+
+                  {images.length > 4 && (
+
+                    <button
+
+                      type="button"
+
+                      onClick={() =>
+
+                        setLightbox({
+
+                          images,
+
+                          index: 4,
+
+                          title: item.title,
+
+                        })
+
+                      }
+
+                      className="col-span-2 rounded-lg py-3 text-sm text-[#C9A96E] transition hover:bg-white/5 md:rounded-xl"
+
                     >
 
-                      <img
-                        src={image}
-                        alt={`${item.title} - صورة ${imageIndex + 1}`}
-                        className="
-                          w-full
-                          h-full
-                          object-cover
-                          transition
-                          duration-700
-                          hover:scale-105
-                        "
-                      />
+                      عرض بقية الصور ({images.length - 4})
 
-                    </div>
+                    </button>
 
-                  ))}
+                  )}
 
                 </div>
 
-                {/* عنوان الذكرى */}
-                <h3
-                  className="
-                    text-2xl
-                    md:text-3xl
-                    font-light
-                  "
-                >
+              )}
+
+
+
+              {/* معلومات الذكرى */}
+
+              <div className="p-6 md:p-10 lg:p-12">
+
+                {/* لا يظهر حقل السنة إطلاقًا إذا كان فارغًا */}
+
+                {year && (
+
+                  <p
+
+                    dir="ltr"
+
+                    className="mb-3 text-sm tracking-[0.2em] text-[#C9A96E]"
+
+                  >
+
+                    {year}
+
+                  </p>
+
+                )}
+
+
+
+                <h3 className="text-2xl font-light leading-relaxed md:text-3xl">
+
                   {item.title}
+
                 </h3>
 
-                {/* وصف الذكرى */}
-                <p
-                  className="
-                    mt-4
-                    text-gray-400
-                    leading-loose
-                    max-w-md
-                  "
-                >
-                  {item.description}
-                </p>
+
+
+                {item.description && (
+
+                  <p className="mt-4 max-w-3xl text-sm leading-8 text-gray-400 md:text-base md:leading-9">
+
+                    {item.description}
+
+                  </p>
+
+                )}
+
+
+
+                {images.length > 0 && (
+
+                  <button
+
+                    type="button"
+
+                    onClick={() =>
+
+                      setLightbox({
+
+                        images,
+
+                        index: 0,
+
+                        title: item.title,
+
+                      })
+
+                    }
+
+                    className="mt-6 inline-flex items-center gap-2 text-sm text-[#C9A96E] transition hover:text-white"
+
+                  >
+
+                    <span>استكشف الصور</span>
+
+                    <span aria-hidden="true">←</span>
+
+                  </button>
+
+                )}
 
               </div>
-            </div>
+
+            </article>
+
           );
+
         })}
+
       </div>
+
+
+
+      {/* نافذة تكبير الصور */}
+
+      {lightbox && lightbox.images.length > 0 && (
+
+        <div
+
+          className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/95 p-4 pt-20 backdrop-blur-md md:p-10 md:pt-16"
+
+          role="dialog"
+
+          aria-modal="true"
+
+          aria-label="عارض الصور"
+
+          onClick={() => setLightbox(null)}
+
+        >
+
+          <button
+
+            type="button"
+
+            onClick={() => setLightbox(null)}
+
+            aria-label="إغلاق الصورة"
+
+            className="absolute right-5 top-5 z-20 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-white/10 text-2xl text-white transition hover:bg-[#C9A96E] hover:text-black"
+
+          >
+
+            ×
+
+          </button>
+
+
+
+          <div
+
+            className="relative flex w-full max-w-5xl flex-col items-center pb-12"
+
+            onClick={(event) => event.stopPropagation()}
+
+          >
+
+            <img
+
+              key={lightbox.images[lightbox.index].url}
+
+              src={lightbox.images[lightbox.index].url}
+
+              alt={lightbox.images[lightbox.index].alt_text}
+
+              className="max-h-[75vh] max-w-full rounded-lg object-contain shadow-2xl"
+
+            />
+
+
+
+            <p className="mt-5 text-center text-sm text-[#C9A96E]">
+
+              {lightbox.title}
+
+            </p>
+
+
+
+            <p className="mt-2 text-xs text-gray-400" dir="ltr">
+
+              {lightbox.index + 1} / {lightbox.images.length}
+
+            </p>
+
+
+
+                          {/* التعليقات تظهر للصور المنشورة من قاعدة البيانات فقط. */}
+              {activePhotoId && (
+                <div dir="rtl" className="mt-8 w-full max-w-2xl rounded-2xl border border-white/10 bg-[#1D1D1D] p-5 text-right md:p-7">
+                  <h3 className="mb-5 text-lg text-[#C9A96E]">تعليقات الصورة ({comments.length})</h3>
+                  {commentsLoading && <p className="text-sm text-gray-400">جارٍ تحميل التعليقات...</p>}
+                  {!commentsLoading && comments.length === 0 && (
+                    <p className="text-sm text-gray-400">لا توجد تعليقات بعد. كن أول من يعلّق.</p>
+                  )}
+                  <div className="max-h-64 space-y-4 overflow-y-auto">
+                    {comments.map((comment) => (
+                      <div key={comment.id} className="border-b border-white/10 pb-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <strong className="text-sm font-medium text-[#C9A96E]">{comment.author_name}</strong>
+                          <time className="text-xs text-gray-500" dateTime={comment.created_at}>
+                            {new Date(comment.created_at).toLocaleDateString("ar")}
+                          </time>
+                        </div>
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-7 text-gray-200">{comment.content}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {commentError && <p role="alert" className="mt-4 text-sm text-red-300">{commentError}</p>}
+                  {!user ? (
+                    <p className="mt-5 text-sm text-gray-400">سجّل الدخول بحسابك للمشاركة حتى تتمكن من كتابة تعليق.</p>
+                  ) : contributorLoading ? (
+                    <p className="mt-5 text-sm text-gray-400">جارٍ التحقق من حساب المشارك...</p>
+                  ) : contributorName ? (
+                    <form onSubmit={submitComment} className="mt-6 space-y-3">
+                      <p className="text-sm text-gray-400">
+                        التعليق باسم: <strong className="text-[#C9A96E]">{contributorName}</strong>
+                      </p>
+                      <textarea
+                        value={commentText}
+                        onChange={(event) => setCommentText(event.target.value)}
+                        maxLength={1000}
+                        rows={3}
+                        required
+                        placeholder="اكتب تعليقك على هذه الصورة..."
+                        className="w-full resize-y rounded-lg border border-white/20 bg-black/30 p-3 text-sm text-white outline-none focus:border-[#C9A96E]"
+                      />
+                      <button type="submit" disabled={sendingComment} className="rounded-lg bg-[#C9A96E] px-5 py-2.5 text-sm font-medium text-black disabled:opacity-50">
+                        {sendingComment ? "جارٍ الإرسال..." : "نشر التعليق"}
+                      </button>
+                    </form>
+                  ) : (
+                    <p className="mt-5 text-sm text-amber-200">هذا الحساب غير مرتبط بسجل مشارك. استخدم حساب المشاركة المعتمد لإضافة تعليق.</p>
+                  )}
+                </div>
+              )}
+
+{lightbox.images.length > 1 && (
+
+              <>
+
+                <button
+
+                  type="button"
+
+                  onClick={() => moveImage(-1)}
+
+                  aria-label="الصورة السابقة"
+
+                  className="absolute left-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-2xl text-white transition hover:bg-[#C9A96E] hover:text-black md:-left-16"
+
+                >
+
+                  ‹
+
+                </button>
+
+
+
+                <button
+
+                  type="button"
+
+                  onClick={() => moveImage(1)}
+
+                  aria-label="الصورة التالية"
+
+                  className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 bg-white/10 text-2xl text-white transition hover:bg-[#C9A96E] hover:text-black md:-right-16"
+
+                >
+
+                  ›
+
+                </button>
+
+              </>
+
+            )}
+
+          </div>
+
+        </div>
+
+      )}
+
     </section>
+
   );
+
 }
+
+
 
 export default Timeline;

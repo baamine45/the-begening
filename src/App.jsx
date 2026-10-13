@@ -3,6 +3,11 @@ import { useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import GroomDashboard from "./components/groom/GroomDashboard";
+import GroomLogin from "./components/groom/GroomLogin";
+import TimelineAdmin from "./components/admin/TimelineAdmin";
+import AdminLogin from "./components/admin/AdminLogin";
+import AdminResetPassword from "./components/admin/AdminResetPassword";
+import ContributionsAdmin from "./components/admin/ContributionsAdmin";
 
 import Hero from "./components/home/Hero";
 import MemoryIntro from "./components/home/MemoryIntro";
@@ -190,11 +195,12 @@ if (error) {
    
      <BrowserRouter>
     <Routes>
-      <Route
-        path="/groom"
-        element={<GroomDashboard />}
-      />
-
+           <Route path="/groom-login" element={<GroomLogin />} />
+          <Route path="/groom" element={<GroomDashboard />} />
+          <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/admin" element={<TimelineAdmin />} />
+          <Route path="/admin-reset-password" element={<AdminResetPassword />}/>
+          <Route path="/admin/contributions" element={<ContributionsAdmin />}/>
       <Route
         path="*"
         element={

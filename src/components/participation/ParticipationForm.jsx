@@ -9,7 +9,7 @@ function ParticipationForm({ event }) {
   const [message, setMessage] = useState("");
   const [memory, setMemory] = useState("");
 
-  // الصورة اختيارية، لكن رفعها إلى Storage غير مفعّل بعد
+  // الصورة اختيارية، وسيتم رفعها إلى Supabase Storage عند الإرسال
   const [photo, setPhoto] = useState(null);
 
   // بيانات التسجيل الصوتي
@@ -139,6 +139,57 @@ function ParticipationForm({ event }) {
     setStep(2);
   };
 
+  // تحديد امتداد مناسب للملف قبل رفعه إلى Storage
+  const getFileExtension = (file, fallback) => {
+    const nameParts = file?.name?.split(".") || [];
+    const nameExtension = nameParts.length > 1 ? nameParts.pop().toLowerCase() : "";
+
+    if (/^[a-z0-9]{2,5}$/.test(nameExtension)) return nameExtension;
+
+    const mimeExtensions = {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+      "audio/webm": "webm",
+      "audio/ogg": "ogg",
+      "audio/mp4": "m4a",
+      "audio/mpeg": "mp3",
+      "audio/wav": "wav",
+    };
+
+    return mimeExtensions[file?.type] || fallback;
+  };
+
+  // رفع ملف إلى الـ Bucket الخاص بالمشاركات، داخل مجلد المستخدم نفسه
+  const uploadContributionFile = async (file, userId, eventId, kind) => {
+    if (!file) return null;
+
+    const fallbackExtension = kind === "photo" ? "jpg" : "webm";
+    const extension = getFileExtension(file, fallbackExtension);
+    const filePath = `${userId}/${eventId}/${crypto.randomUUID()}-${kind}.${extension}`;
+
+    const { data, error } = await supabase.storage
+      .from("contribution-media")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        contentType: file.type || (kind === "photo" ? "image/jpeg" : "audio/webm"),
+        upsert: false,
+      });
+
+    if (error) {
+      console.error(`Upload ${kind} error:`, error);
+      throw new Error(
+        kind === "photo"
+          ? "تعذر رفع الصورة. تحقق من إعدادات التخزين وحاول مرة أخرى."
+          : "تعذر رفع التسجيل الصوتي. تحقق من إعدادات التخزين وحاول مرة أخرى."
+      );
+    }
+
+    // نحفظ مسار الملف داخل Storage، لا رابطًا عامًا؛ لأن الـ Bucket خاص
+    return data.path;
+  };
+
   // إرسال المشاركة إلى Supabase
   const submitContribution = async () => {
     if (isSubmitting) return;
@@ -216,10 +267,50 @@ function ParticipationForm({ event }) {
         contributorId = newContributor.id;
       }
 
-      // إنشاء المشاركة:
-      // - pending تعني أنها تنتظر المراجعة.
-      // - private تعني أنها مصنفة كرسالة خاصة.
-      // ملاحظة: حماية الخصوصية الفعلية تتطلب سياسة RLS مناسبة في Supabase.
+      // التحقق من نوع وحجم الملفات قبل رفعها
+      if (photo && (!photo.type.startsWith("image/") || photo.size > 10 * 1024 * 1024)) {
+        setSubmitError("اختر صورة صحيحة لا يتجاوز حجمها 10 ميغابايت.");
+        return;
+      }
+
+      if (audioBlob && (!audioBlob.type.startsWith("audio/") || audioBlob.size > 15 * 1024 * 1024)) {
+        setSubmitError("التسجيل الصوتي غير صالح أو يتجاوز حجمه 15 ميغابايت.");
+        return;
+      }
+
+      // رفع الملفات أولًا داخل مجلد يحمل معرّف المستخدم.
+      // هذا المسار يتوافق مع سياسة INSERT التي أنشأناها في Supabase Storage.
+      let photoPath = null;
+      let uploadedAudioPath = null;
+
+      try {
+        if (photo) {
+          photoPath = await uploadContributionFile(photo, user.id, event.id, "photo");
+        }
+
+        if (audioBlob) {
+          const audioFile = new File(
+            [audioBlob],
+            `recording.${getFileExtension(audioBlob, "webm")}`,
+            { type: audioBlob.type || "audio/webm" }
+          );
+          uploadedAudioPath = await uploadContributionFile(
+            audioFile,
+            user.id,
+            event.id,
+            "audio"
+          );
+        }
+      } catch (uploadError) {
+        console.error("Contribution media upload error:", uploadError);
+        setSubmitError(uploadError.message || "تعذر رفع ملفات المشاركة.");
+        return;
+      }
+
+      // إنشاء المشاركة بعد رفع الملفات بنجاح:
+      // - pending تعني أنها تنتظر مراجعة المشرف.
+      // - private تعني أنها لا تُنشر للزوار تلقائيًا.
+      // نخزن مسارات الملفات لأن الـ Bucket خاص وليس عامًا.
       const { error: contributionError } = await supabase
         .from("contributions")
         .insert({
@@ -227,11 +318,8 @@ function ParticipationForm({ event }) {
           contributor_id: contributorId,
           message: message.trim(),
           memory: memory.trim() || null,
-
-          // رفع الملفات إلى Supabase Storage غير مفعّل بعد
-          photo_url: null,
-          audio_url: null,
-
+          photo_url: photoPath,
+          audio_url: uploadedAudioPath,
           status: "pending",
           visibility: "private",
           revealed: false,
@@ -357,8 +445,7 @@ function ParticipationForm({ event }) {
                 </label>
 
                 <p className="mb-4 text-sm text-gray-500">
-                  يمكنك اختيار صورة، لكن حفظها وإرسالها إلى الخادم
-                  غير مفعّل في هذه النسخة.
+                  يمكنك إرفاق صورة بحجم لا يتجاوز 10 ميغابايت؛ وستُرفع بصورة خاصة عند إرسال المشاركة.
                 </p>
 
                 <input
@@ -383,8 +470,7 @@ function ParticipationForm({ event }) {
                 </label>
 
                 <p className="mb-6 text-sm text-gray-500">
-                  يمكنك تسجيل رسالة صوتية والاستماع إليها قبل الإرسال.
-                  التسجيل يبقى محليًا في هذه النسخة ولا يُرفع إلى الخادم.
+                  يمكنك تسجيل رسالة صوتية والاستماع إليها قبل الإرسال. الحد الأقصى للحجم 15 ميغابايت.
                 </p>
 
                 {!isRecording && !audioUrl && (
@@ -497,7 +583,7 @@ function ParticipationForm({ event }) {
                     className="mx-auto max-h-80 rounded-xl object-cover"
                   />
                   <p className="mt-3 text-sm text-gray-500">
-                    لن تُحفظ الصورة في قاعدة البيانات حتى نفعّل رفع الملفات.
+                    ستُرفع الصورة إلى مساحة التخزين الخاصة عند تأكيد الإرسال.
                   </p>
                 </div>
               )}
@@ -509,7 +595,7 @@ function ParticipationForm({ event }) {
                   </p>
                   <audio controls src={audioUrl} className="w-full" />
                   <p className="mt-3 text-sm text-gray-500">
-                    لن يُرفع التسجيل الصوتي إلى الخادم في هذه النسخة.
+سيُرفع التسجيل إلى مساحة التخزين الخاصة عند تأكيد الإرسال.
                   </p>
                 </div>
               )}
