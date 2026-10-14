@@ -44,13 +44,14 @@ function Messages() {
       const { data, error } = await supabase
         .from("contributions")
         .select(`
-          id,
-          message,
-          created_at,
-          contributors (
-            name
-          )
-        `)
+  id,
+  message,
+  photo_url,
+  created_at,
+  contributors (
+    name
+  )
+`)
         .eq("status", "approved")
         .eq("visibility", "public")
         .order("created_at", {
@@ -81,7 +82,32 @@ function Messages() {
       // --------------------------------
       // تخزين الرسائل في state
       // --------------------------------
-      setMessages(data || []);
+      // إنشاء رابط مؤقت لصورة كل مساهمة عامة
+const messagesWithPhotos = await Promise.all(
+  (data || []).map(async (item) => {
+    // بعض المساهمات قد لا تحتوي على صورة
+    if (!item.photo_url) {
+      return { ...item, photoSignedUrl: null };
+    }
+
+    const { data: signedData, error: signedError } =
+      await supabase.storage
+        .from("contribution-media")
+        .createSignedUrl(item.photo_url, 60 * 60);
+
+    if (signedError) {
+      console.error("تعذر إنشاء رابط الصورة:", signedError);
+      return { ...item, photoSignedUrl: null };
+    }
+
+    return {
+      ...item,
+      photoSignedUrl: signedData?.signedUrl || null,
+    };
+  })
+);
+
+setMessages(messagesWithPhotos);
 
       setLoading(false);
     };
@@ -291,7 +317,14 @@ function Messages() {
                 {item.message}
               </p>
 
-
+{item.photoSignedUrl && (
+  <img
+    src={item.photoSignedUrl}
+    alt="صورة من ذكريات الأصدقاء"
+    loading="lazy"
+    className="mt-6 w-full rounded-xl object-cover"
+  />
+)}
               {/* --------------------------------
                   اسم صاحب الرسالة
                   -------------------------------- */}

@@ -21,6 +21,45 @@ function GroomDashboard() {
   // 2. حالات الرسائل المعتمدة
   // ============================================
   const [messages, setMessages] = useState([]);
+  // نص البحث عن رسالة أو اسم صاحبها
+const [searchTerm, setSearchTerm] = useState("");
+
+// تصفية الرسائل حسب الخصوصية
+const [visibilityFilter, setVisibilityFilter] = useState("all");
+  // إحصائيات المساهمات المعتمدة المعروضة للعريس
+const totalMessages = messages.length;
+
+const publicMessagesCount = messages.filter(
+  (item) => item.visibility === "public"
+).length;
+
+const privateMessagesCount = messages.filter(
+  (item) => item.visibility !== "public"
+).length;
+// الرسائل المطابقة للبحث والتصفية
+const filteredMessages = messages.filter((item) => {
+  const search = searchTerm.trim().toLowerCase();
+
+  // البحث في اسم المشارك ونص الرسالة والذكرى
+  const matchesSearch =
+    !search ||
+    [
+      item.contributors?.name,
+      item.message,
+      item.memory,
+    ].some((value) =>
+      String(value || "").toLowerCase().includes(search)
+    );
+
+  // تحديد ما إذا كانت الرسالة عامة أو خاصة
+  const matchesVisibility =
+    visibilityFilter === "all" ||
+    (visibilityFilter === "public"
+      ? item.visibility === "public"
+      : item.visibility !== "public");
+
+  return matchesSearch && matchesVisibility;
+});
   const [messagesLoading, setMessagesLoading] = useState(true);
   const [messagesError, setMessagesError] = useState("");
 
@@ -130,7 +169,7 @@ function GroomDashboard() {
           error: fetchError,
         } = await supabase
           .from("contributions")
-         
+
 .select(`
   id,
   message,
@@ -149,7 +188,7 @@ function GroomDashboard() {
 
         if (!mounted) return;
 
-        
+
 if (fetchError) {
   console.error("Messages fetch error:", fetchError);
   setMessagesError("تعذر تحميل الرسائل المعتمدة.");
@@ -298,10 +337,10 @@ if (fetchError) {
   // ============================================
   if (!isGroom) {
     return (
-      <main
-        dir="rtl"
-        className="min-h-screen bg-[#F8F5F0] px-6 py-24 text-center text-[#252525]"
-      >
+     <main
+  dir="rtl"
+  className="min-h-screen bg-[#F8F5F0] px-4 py-10 text-[#252525] sm:px-6 sm:py-16 lg:py-24"
+>
         <h1 className="text-3xl font-light">
           هذه الصفحة مخصصة للعريس
         </h1>
@@ -369,7 +408,29 @@ if (fetchError) {
           بعض الكلمات تستحق أن تصل في وقتها المناسب،
           وبعض الذكريات تصبح أجمل حين نكتشفها معًا.
         </p>
+{/* ملخص المساهمات */}
+<div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div className="border border-[#252525]/10 bg-white p-5">
+    <p className="text-sm text-gray-500">إجمالي الرسائل المعتمدة</p>
+    <p className="mt-3 text-3xl font-light">
+      {totalMessages}
+    </p>
+  </div>
 
+  <div className="border border-[#252525]/10 bg-white p-5">
+    <p className="text-sm text-gray-500">متاحة للزوار</p>
+    <p className="mt-3 text-3xl font-light text-green-700">
+      {publicMessagesCount}
+    </p>
+  </div>
+
+  <div className="border border-[#252525]/10 bg-white p-5">
+    <p className="text-sm text-gray-500">رسائل خاصة</p>
+    <p className="mt-3 text-3xl font-light text-[#9A6B22]">
+      {privateMessagesCount}
+    </p>
+  </div>
+</div>
         <section className="mt-12 border border-[#252525]/10 bg-white p-8 md:p-10">
           <p className="mb-4 text-sm tracking-widest text-[#C9A96E]">
             من الأحبة
@@ -384,6 +445,47 @@ if (fetchError) {
             أصدقاؤك أن يشاركوها معك، لتكون جزءًا من فرحة
             هذا اليوم وبداية فصل جديد من حياتك.
           </p>
+
+{/* البحث والتصفية */}
+<div className="mt-8 grid gap-4 sm:grid-cols-2">
+  <div>
+    <label
+      htmlFor="message-search"
+      className="mb-2 block text-sm text-gray-600"
+    >
+      البحث في المساهمات
+    </label>
+
+    <input
+      id="message-search"
+      type="search"
+      value={searchTerm}
+      onChange={(event) => setSearchTerm(event.target.value)}
+      placeholder="اسم المشارك أو نص الرسالة..."
+      className="w-full border border-[#252525]/15 bg-white p-3 outline-none focus:border-[#C9A96E]"
+    />
+  </div>
+
+  <div>
+    <label
+      htmlFor="visibility-filter"
+      className="mb-2 block text-sm text-gray-600"
+    >
+      تصفية حسب الخصوصية
+    </label>
+
+    <select
+      id="visibility-filter"
+      value={visibilityFilter}
+      onChange={(event) => setVisibilityFilter(event.target.value)}
+      className="w-full border border-[#252525]/15 bg-white p-3 outline-none focus:border-[#C9A96E]"
+    >
+      <option value="all">جميع الرسائل</option>
+      <option value="public">المتاحة للزوار</option>
+      <option value="private">الرسائل الخاصة</option>
+    </select>
+  </div>
+</div>
 
           {/* نتيجة آخر عملية لتغيير الخصوصية */}
           {visibilityMessage && (
@@ -405,20 +507,43 @@ if (fetchError) {
             <p role="alert" className="mt-8 text-red-600">
               تعذّر تحميل المحتوى الآن. يرجى المحاولة لاحقًا.
             </p>
-          ) : messages.length === 0 ? (
-            <div className="mt-8 border border-[#252525]/10 px-6 py-10 text-center">
-              <p className="text-lg font-light">
-                لكل ذكرى وقتها الجميل
-              </p>
 
-              <p className="mt-3 leading-loose text-gray-500">
-                هذه المساحة تنتظر الكلمات التي ستجعل
-                من 17 أكتوبر يومًا لا يُنسى.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-8 space-y-6">
-              {messages.map((item) => {
+) : messages.length === 0 ? (
+  <div className="mt-8 border border-[#252525]/10 px-6 py-10 text-center">
+    <p className="text-lg font-light">
+      لكل ذكرى وقتها الجميل
+    </p>
+
+    <p className="mt-3 leading-loose text-gray-500">
+      هذه المساحة تنتظر الكلمات التي ستجعل
+      من 17 أكتوبر يومًا لا يُنسى.
+    </p>
+  </div>
+) : filteredMessages.length === 0 ? (
+  <div className="mt-8 border border-[#252525]/10 bg-white px-6 py-10 text-center">
+    <p className="text-lg font-light">
+      لا توجد نتائج مطابقة
+    </p>
+
+    <p className="mt-3 leading-loose text-gray-500">
+      جرّب تغيير كلمة البحث أو اختيار تصفية مختلفة.
+    </p>
+
+    <button
+      type="button"
+      onClick={() => {
+        setSearchTerm("");
+        setVisibilityFilter("all");
+      }}
+      className="mt-5 border border-[#252525]/20 px-5 py-3 text-sm transition hover:bg-[#C9A96E] hover:text-white"
+    >
+      عرض جميع الرسائل
+    </button>
+  </div>
+) : (
+  <div className="mt-8 space-y-6">
+
+              {filteredMessages.map((item) => {
                 // هل يجري تحديث هذه الرسالة؟
                 const isUpdating = updatingMessageId === item.id;
 
@@ -430,6 +555,38 @@ if (fetchError) {
                     key={item.id}
                     className="border border-[#252525]/10 p-6 transition hover:shadow-md"
                   >
+
+{/* رأس البطاقة: اسم المشارك وتاريخ المساهمة */}
+<div className="mb-6 flex flex-wrap items-center justify-between gap-4 border-b border-[#252525]/10 pb-5">
+  <div>
+    <p className="mb-2 text-xs text-gray-500">
+      مساهمة من
+    </p>
+
+    <h3 className="text-lg font-medium text-[#252525]">
+      {item.contributors?.name || "من أحد الأصدقاء"}
+    </h3>
+
+    <p className="mt-2 text-xs text-gray-500">
+      {item.created_at
+        ? new Date(item.created_at).toLocaleDateString("ar")
+        : ""}
+    </p>
+  </div>
+
+  <span
+    className={`rounded-full px-3 py-1.5 text-xs ${
+      item.visibility === "public"
+        ? "bg-green-50 text-green-700"
+        : "bg-amber-50 text-amber-800"
+    }`}
+  >
+    {item.visibility === "public"
+      ? "متاحة للزوار"
+      : "رسالة خاصة"}
+  </span>
+</div>
+
                     <div className="mb-5 text-3xl text-[#C9A96E]">
                       “
                     </div>
@@ -451,9 +608,12 @@ if (fetchError) {
                     )}
 
 {/* عرض الصورة المرفقة */}
+
+
+{/* عرض الصورة المرفقة */}
 {item.photoSignedUrl && (
-  <div className="mt-5">
-    <p className="mb-3 text-sm text-[#C9A96E]">
+  <div className="mt-6 rounded-xl border border-[#252525]/10 bg-[#F8F5F0] p-4">
+    <p className="mb-4 text-sm font-medium text-[#9A793F]">
       الصورة المرفقة
     </p>
 
@@ -461,21 +621,30 @@ if (fetchError) {
       href={item.photoSignedUrl}
       target="_blank"
       rel="noopener noreferrer"
+      aria-label="فتح الصورة بحجمها الكامل"
+      className="block overflow-hidden rounded-lg"
     >
       <img
         src={item.photoSignedUrl}
         alt="صورة من إحدى الذكريات"
-        className="max-h-80 w-auto max-w-full rounded-lg object-contain"
+        className="max-h-[420px] w-full rounded-lg object-contain"
         loading="lazy"
       />
     </a>
+
+    <p className="mt-3 text-xs text-gray-500">
+      اضغط على الصورة لفتحها بحجمها الكامل.
+    </p>
   </div>
 )}
 
+
+{/* مشغّل التسجيل الصوتي */}
+
 {/* مشغّل التسجيل الصوتي */}
 {item.audioSignedUrl && (
-  <div className="mt-5">
-    <p className="mb-3 text-sm text-[#C9A96E]">
+  <div className="mt-6 rounded-xl border border-[#252525]/10 bg-[#F8F5F0] p-4">
+    <p className="mb-4 text-sm font-medium text-[#9A793F]">
       التسجيل الصوتي
     </p>
 
@@ -487,17 +656,17 @@ if (fetchError) {
     >
       متصفحك لا يدعم تشغيل الصوت.
     </audio>
+
+    <p className="mt-3 text-xs text-gray-500">
+      يمكنك الاستماع إلى التسجيل مباشرةً من هنا.
+    </p>
   </div>
 )}
 
-                    <div className="mt-6 border-t border-[#252525]/10 pt-4">
-                      <p className="text-sm text-[#C9A96E]">
-                        — {item.contributors?.name || "من أحد الأصدقاء"}
-                      </p>
-                    </div>
+
 
                     {/* حالة الخصوصية وأزرار التحكم */}
-                    <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+                    <div className="mt-5 flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm text-gray-500">
                         {isPublic
                           ? "هذه الرسالة متاحة للزوار"
@@ -515,7 +684,7 @@ if (fetchError) {
                             isPublic ? "private" : "public"
                           )
                         }
-                        className={`px-5 py-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                        className={`w-full px-5 py-3 text-sm transition disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto ${
                           isPublic
                             ? "border border-[#252525]/20 text-[#444] hover:bg-[#F8F5F0]"
                             : "bg-[#C9A96E] text-white hover:bg-[#B5965C]"

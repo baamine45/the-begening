@@ -146,15 +146,32 @@ function TimelineAdmin() {
     const validFiles = [];
     const errors = [];
 
-    for (const file of files) {
-      if (!file.type.startsWith("image/")) {
-        errors.push(`${file.name}: الملف ليس صورة.`);
-      } else if (file.size > MAX_FILE_SIZE) {
-        errors.push(`${file.name}: حجم الصورة أكبر من 8 ميغابايت.`);
-      } else {
-        validFiles.push(file);
-      }
-    }
+
+const allowedTypes = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+];
+
+for (const file of files) {
+  // التحقق من نوع الصورة
+  if (!allowedTypes.includes(file.type)) {
+    errors.push(
+      `${file.name}: الصيغ المسموحة هي JPEG وPNG وWebP فقط.`
+    );
+  }
+  // التحقق من أن حجم الصورة لا يتجاوز 8 ميغابايت
+  else if (file.size > MAX_FILE_SIZE) {
+    errors.push(
+      `${file.name}: حجم الصورة أكبر من 8 ميغابايت.`
+    );
+  }
+  // إذا اجتازت الصورة الاختبارين، نضيفها إلى الملفات المقبولة
+  else {
+    validFiles.push(file);
+  }
+}
+
 
     setSelectedFiles(validFiles);
     setMessage(errors.length ? errors.join(" ") : "");
@@ -507,8 +524,8 @@ function TimelineAdmin() {
             <label htmlFor="memory-photos" className="mb-2 block">صور الذكرى</label>
             <input
               id="memory-photos"
-              type="file"
-              accept="image/*"
+              typenp="file"
+             accept="image/jpeg,image/png,image/webp"
               multiple
               onChange={handleFilesChange}
               className="w-full rounded-xl bg-white p-3 text-black"

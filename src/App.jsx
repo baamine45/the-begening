@@ -1,22 +1,63 @@
 
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import GroomDashboard from "./components/groom/GroomDashboard";
-import GroomLogin from "./components/groom/GroomLogin";
-import TimelineAdmin from "./components/admin/TimelineAdmin";
-import AdminLogin from "./components/admin/AdminLogin";
-import AdminResetPassword from "./components/admin/AdminResetPassword";
-import ContributionsAdmin from "./components/admin/ContributionsAdmin";
+
+// تحميل صفحات العريس عند فتحها فقط
+const GroomDashboard = lazy(() =>
+  import("./components/groom/GroomDashboard")
+);
+const AdminDashboard = lazy(() =>
+  import("./components/admin/AdminDashboard")
+);
+const GroomLogin = lazy(() =>
+  import("./components/groom/GroomLogin")
+);
+
+// تحميل صفحات المشرف عند الحاجة
+const TimelineAdmin = lazy(() =>
+  import("./components/admin/TimelineAdmin")
+);
+
+const AdminLogin = lazy(() =>
+  import("./components/admin/AdminLogin")
+);
+
+const AdminResetPassword = lazy(() =>
+  import("./components/admin/AdminResetPassword")
+);
+
+const ContributionsAdmin = lazy(() =>
+  import("./components/admin/ContributionsAdmin")
+);
+
 
 import Hero from "./components/home/Hero";
 import MemoryIntro from "./components/home/MemoryIntro";
-import Timeline from "./components/home/Timeline";
-import GroomJourney from "./components/home/GroomJourney";
-import Countdown from "./components/home/Countdown";
-import Messages from "./components/home/Messages";
-import AudioMessages from "./components/home/AudioMessages";
-import ParticipationForm from "./components/participation/ParticipationForm";
+// تحميل أقسام الصفحة الرئيسية عند الحاجة
+const Timeline = lazy(() =>
+  import("./components/home/Timeline")
+);
+
+const GroomJourney = lazy(() =>
+  import("./components/home/GroomJourney")
+);
+
+const Countdown = lazy(() =>
+  import("./components/home/Countdown")
+);
+
+const Messages = lazy(() =>
+  import("./components/home/Messages")
+);
+
+const AudioMessages = lazy(() =>
+  import("./components/home/AudioMessages")
+);
+
+const ParticipationForm = lazy(() =>
+  import("./components/participation/ParticipationForm")
+);
 
 function App() {
   const [event, setEvent] = useState(null);
@@ -194,11 +235,25 @@ if (error) {
     
    
      <BrowserRouter>
+  <Suspense
+    fallback={
+      <main
+        dir="rtl"
+        className="flex min-h-screen items-center justify-center bg-[#F8F5F0] text-[#252525]"
+      >
+        جارٍ تحميل الصفحة...
+      </main>
+    }
+  >
     <Routes>
            <Route path="/groom-login" element={<GroomLogin />} />
           <Route path="/groom" element={<GroomDashboard />} />
           <Route path="/admin-login" element={<AdminLogin />} />
-            <Route path="/admin" element={<TimelineAdmin />} />
+           {/* الصفحة الرئيسية لإدارة المشروع */}
+<Route path="/admin" element={<AdminDashboard />} />
+
+{/* إدارة ذكريات الخط الزمني وصورها */}
+<Route path="/admin/timeline" element={<TimelineAdmin />} />
           <Route path="/admin-reset-password" element={<AdminResetPassword />}/>
           <Route path="/admin/contributions" element={<ContributionsAdmin />}/>
       <Route
@@ -209,11 +264,45 @@ if (error) {
       {/* أقسام الاحتفال متاحة للجميع */}
       <Hero event={event} />
       <MemoryIntro />
-      <Timeline />
-      <GroomJourney />
-      <Countdown event={event} />
-      <Messages />
-      <AudioMessages />
+     <Suspense
+  fallback={
+    <div className="py-10 text-center text-gray-500">
+      جارٍ تحميل الذكريات...
+    </div>
+  }
+>
+  <Timeline />
+</Suspense>
+      <Suspense
+  fallback={
+    <div className="py-10 text-center text-gray-500">
+      جارٍ تحميل الذكريات...
+    </div>
+  }
+>
+  <GroomJourney />
+</Suspense>
+      <Suspense fallback={<div className="py-8" />}>
+  <Countdown event={event} />
+</Suspense>
+      <Suspense
+  fallback={
+    <div className="py-10 text-center text-gray-500">
+      جارٍ تحميل الرسائل...
+    </div>
+  }
+>
+  <Messages />
+</Suspense>
+    <Suspense
+  fallback={
+    <div className="py-10 text-center text-gray-400">
+      جارٍ تحميل التسجيلات الصوتية...
+    </div>
+  }
+>
+  <AudioMessages />
+</Suspense>
 
       {/* دعوة المشاركة */}
       {!showParticipation && (
@@ -333,14 +422,23 @@ if (error) {
 
       {/* لا تظهر استمارة المشاركة إلا بعد تسجيل الدخول وطلب المشاركة */}
      
-      {showParticipation && user && (
-        <ParticipationForm event={event} />
-      )}
+     {showParticipation && user && (
+  <Suspense
+    fallback={
+      <div className="py-10 text-center text-gray-500">
+        جارٍ تحميل استمارة المشاركة...
+      </div>
+    }
+  >
+    <ParticipationForm event={event} />
+  </Suspense>
+)}
           </main>
         }
       />
-    </Routes>
-  </BrowserRouter>
+        </Routes>
+  </Suspense>
+</BrowserRouter>
   );
 }
 

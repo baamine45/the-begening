@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import timelineData from "../../data/timelineData";
 
 import { supabase } from "../../lib/supabase";
 
@@ -14,7 +13,7 @@ const BUCKET_NAME = "timeline-photos";
 
 function Timeline() {
 
-  const [items, setItems] = useState(timelineData);
+  const [items, setItems] = useState([]);
 
   const [loading, setLoading] = useState(true);
 
@@ -73,16 +72,10 @@ function Timeline() {
 
         if (memoriesError) throw memoriesError;
 
-
-
         if (!memories || memories.length === 0) {
-
-          if (active) setItems(timelineData);
-
-          return;
-
-        }
-
+  if (active) setItems([]);
+  return;
+}
 
 
         // تحميل الصور التابعة للذكريات المنشورة.
@@ -171,35 +164,16 @@ function Timeline() {
 
 
 
-        // نحتفظ بالذكريات المحلية التي لا توجد لها سنة مقابلة
 
-        // في البيانات المنشورة، دون الاعتماد على سنة فارغة.
-
-        const databaseYears = new Set(
-
-          databaseItems
-
-            .map((item) => item.year.trim())
-
-            .filter(Boolean)
-
-        );
-
-
-
-        const localItems = timelineData.filter((item) => {
-
-          const localYear = String(item.year || "").trim();
-
-          return !localYear || !databaseYears.has(localYear);
-
-        });
-
+// عرض الذكريات المنشورة من Supabase فقط
+if (active) {
+  setItems(databaseItems);
+}
 
 
         if (active) {
 
-          setItems([...localItems, ...databaseItems]);
+         setItems(databaseItems);
 
         }
 
@@ -210,14 +184,11 @@ function Timeline() {
 
 
         if (active) {
+setLoadError(
+  `تعذر تحميل الذكريات: ${error?.message || "سبب غير معروف"}`
+);
 
-          setLoadError(
-
-            "تعذر تحميل بعض الذكريات. نعرض البيانات المحلية المتاحة."
-
-          );
-
-          setItems(timelineData);
+         setItems([]);
 
         }
 

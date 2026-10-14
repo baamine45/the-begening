@@ -70,7 +70,23 @@ function ParticipationForm({ event }) {
       setAudioBlob(null);
       audioChunksRef.current = [];
 
-      const recorder = new MediaRecorder(stream);
+
+      // const recorder = new MediaRecorder(stream);
+     const supportedAudioTypes = [
+  "audio/webm",
+  "audio/mp4",
+  "audio/ogg",
+];
+
+const preferredAudioType = supportedAudioTypes.find((type) =>
+  MediaRecorder.isTypeSupported(type)
+);
+
+const recorder = preferredAudioType
+  ? new MediaRecorder(stream, { mimeType: preferredAudioType })
+  : new MediaRecorder(stream);
+
+console.log("صيغة التسجيل الصوتي:", recorder.mimeType);
       mediaRecorderRef.current = recorder;
 
       // جمع أجزاء الصوت أثناء التسجيل
@@ -164,7 +180,7 @@ function ParticipationForm({ event }) {
   // رفع ملف إلى الـ Bucket الخاص بالمشاركات، داخل مجلد المستخدم نفسه
   const uploadContributionFile = async (file, userId, eventId, kind) => {
     if (!file) return null;
-
+        if (!file) return null;
     const fallbackExtension = kind === "photo" ? "jpg" : "webm";
     const extension = getFileExtension(file, fallbackExtension);
     const filePath = `${userId}/${eventId}/${crypto.randomUUID()}-${kind}.${extension}`;
