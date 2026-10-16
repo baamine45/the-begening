@@ -60,6 +60,8 @@ function Timeline() {
 
           )
 
+          // هذا القسم يعرض سنوات الثانوية فقط؛ ذكريات ما بعد الثانوية يعرضها GroomJourney.
+          .eq("section", "secondary")
           .eq("is_published", true)
 
           .order("section", { ascending: true })
