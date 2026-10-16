@@ -84,7 +84,7 @@ function Timeline() {
 
           .from("timeline_photos")
 
-          .select("id, memory_id, storage_path, alt_text, sort_order")
+          .select("id, memory_id, storage_path, alt_text, title, description, sort_order")
 
           .order("sort_order", { ascending: true });
 
@@ -135,6 +135,8 @@ function Timeline() {
             url: signedData.signedUrl,
 
             alt_text: photo.alt_text || "",
+            title: photo.title || "",
+            description: photo.description || "",
 
             // نميّز صور Supabase عن الصور المحلية حتى نحمّل تعليقاتها فقط.
 
@@ -522,23 +524,39 @@ setLoadError(
 
       {/* تجميع الذكريات حسب القسم والسنة الدراسية مع الحفاظ على ترتيب المشرف */}
       {(() => {
-        const groups = [];
-        const groupIndexes = new Map();
+        const groupMap = new Map();
 
         items.forEach((item, itemIndex) => {
           const year = String(item.year || "").trim();
-          const section = item.section || (year ? "secondary" : "after_secondary");
+          // القسم المخزن في قاعدة البيانات هو المرجع الأساسي:
+          // صور "ما بعد الثانوية" لا تُنقل إلى قسم الثانوية بسبب وجود سنة.
+          const section = item.section === "after_secondary"
+            ? "after_secondary"
+            : "secondary";
           const groupLabel = section === "secondary"
             ? (year || "ذكريات من سنوات الثانوية")
-            : "ما بعد الثانوية";
+            : "كبرت الحكاية";
           const groupKey = `${section}::${groupLabel}`;
 
-          if (!groupIndexes.has(groupKey)) {
-            groupIndexes.set(groupKey, groups.length);
-            groups.push({ key: groupKey, label: groupLabel, section, items: [] });
+          if (!groupMap.has(groupKey)) {
+            groupMap.set(groupKey, { key: groupKey, label: groupLabel, section, items: [] });
           }
 
-          groups[groupIndexes.get(groupKey)].items.push({ item, itemIndex });
+          groupMap.get(groupKey).items.push({ item, itemIndex });
+        });
+
+        const yearOrder = ["2020 - 2021", "2021 - 2022", "2022 - 2023"];
+        const groups = Array.from(groupMap.values()).sort((a, b) => {
+          if (a.section !== b.section) {
+            return a.section === "secondary" ? -1 : 1;
+          }
+          if (a.section !== "secondary") return 0;
+          const ai = yearOrder.indexOf(a.label);
+          const bi = yearOrder.indexOf(b.label);
+          if (ai === -1 && bi === -1) return a.label.localeCompare(b.label, "ar");
+          if (ai === -1) return 1;
+          if (bi === -1) return -1;
+          return ai - bi;
         });
 
         return (
@@ -585,7 +603,7 @@ setLoadError(
                       >
                         <button
                           type="button"
-                          onClick={() => setLightbox({ images, index: imageIndex, title: item.title })}
+                          onClick={() => setLightbox({ images, index: imageIndex, title: image.title || item.title })}
                           aria-label={`فتح الصورة ${imageIndex + 1} من ${item.title}`}
                           className="relative block aspect-[4/3] w-full overflow-hidden bg-black/30 text-right focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#C9A96E]"
                         >
@@ -607,10 +625,10 @@ setLoadError(
                         {/* عنوان الذكرى ووصفها ظاهران أسفل الصورة دون الحاجة إلى فتحها */}
                         <div className="p-5 md:p-6">
                           {year && <p dir="ltr" className="mb-2 text-xs tracking-[0.16em] text-[#C9A96E]">{year}</p>}
-                          <h4 className="text-lg font-medium leading-relaxed text-white md:text-xl">{item.title}</h4>
-                          {item.description && (
+                          <h4 className="text-lg font-medium leading-relaxed text-white md:text-xl">{image.title || item.title}</h4>
+                          {(image.description || item.description) && (
                             <p className="mt-3 whitespace-pre-line break-words text-sm leading-7 text-gray-300">
-                              {item.description}
+                              {image.description || item.description}
                             </p>
                           )}
                           {images.length > 1 && (
@@ -688,10 +706,13 @@ setLoadError(
 
 
             <p className="mt-5 text-center text-sm text-[#C9A96E]">
-
-              {lightbox.title}
-
+              {lightbox.images[lightbox.index].title || lightbox.title}
             </p>
+            {(lightbox.images[lightbox.index].description) && (
+              <p className="mt-3 max-w-3xl whitespace-pre-line text-center text-sm leading-7 text-gray-300">
+                {lightbox.images[lightbox.index].description}
+              </p>
+            )}
 
 
 
