@@ -1,4 +1,4 @@
-
+import { Analytics } from '@vercel/analytics/react';
 import { lazy, Suspense, useEffect, useState } from "react";
 import { supabase } from "./lib/supabase";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
@@ -60,6 +60,7 @@ const ParticipationForm = lazy(() =>
 );
 
 function App() {
+  
   const [event, setEvent] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -107,7 +108,7 @@ function App() {
         );
       }
     };
-
+ 
     const fetchEvent = async () => {
       const { data, error } = await supabase
         .from("events")
@@ -457,6 +458,8 @@ if (error) {
       />
         </Routes>
   </Suspense>
+  {/* إحصاءات زيارات الموقع من Vercel Analytics */}
+  <Analytics />
 </BrowserRouter>
   );
 }
