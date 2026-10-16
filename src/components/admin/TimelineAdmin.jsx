@@ -7,7 +7,7 @@ const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8 MB لكل صورة
 
 const initialForm = {
   section: "secondary",
-  year_label: "2020 - 2021",
+  year_label: "",
   title: "",
   description: "",
   sort_order: 0,
@@ -259,7 +259,11 @@ for (const file of files) {
     try {
       const memoryData = {
         section: form.section,
-        year_label: form.section === "secondary" ? form.year_label.trim() : null,
+        // الفترة الدراسية اختيارية؛ إذا تُركت فارغة نحفظ null.
+        year_label:
+          form.section === "secondary" && form.year_label.trim()
+            ? form.year_label.trim()
+            : null,
         title: form.title.trim(),
         description: form.description.trim(),
         sort_order: form.sort_order,
@@ -464,19 +468,22 @@ for (const file of files) {
 
           {form.section === "secondary" && (
             <div>
-              <label htmlFor="year_label" className="mb-2 block">السنة الدراسية</label>
-              <select
+              <label htmlFor="year_label" className="mb-2 block">
+                السنة أو الفترة الدراسية (اختياري)
+              </label>
+              <input
                 id="year_label"
                 name="year_label"
+                type="text"
                 value={form.year_label}
                 onChange={handleChange}
-                required
+                maxLength={100}
+                placeholder="مثال: 2020 - 2021 أو السنة الأولى ثانوي"
                 className="w-full rounded-xl bg-white p-3 text-black"
-              >
-                <option value="2020 - 2021">2020 - 2021</option>
-                <option value="2021 - 2022">2021 - 2022</option>
-                <option value="2022 - 2023">2022 - 2023</option>
-              </select>
+              />
+              <p className="mt-2 text-sm text-gray-400">
+                يمكنك كتابة أي سنة أو فترة، أو ترك الخانة فارغة.
+              </p>
             </div>
           )}
 
@@ -524,7 +531,7 @@ for (const file of files) {
             <label htmlFor="memory-photos" className="mb-2 block">صور الذكرى</label>
             <input
               id="memory-photos"
-              typenp="file"
+              type="file"
              accept="image/jpeg,image/png,image/webp"
               multiple
               onChange={handleFilesChange}

@@ -77,6 +77,37 @@ function App() {
   useEffect(() => {
     let mounted = true;
 
+    // فتح استمارة المشاركة بعد التأكد من تسجيل الدخول
+    const openParticipationAfterLogin = (currentUser) => {
+      if (!currentUser) return;
+
+      // نتحقق هل المستخدم عاد من رابط المشاركة في البريد
+      const url = new URL(window.location.href);
+      const requestedByUrl =
+        url.searchParams.get("flow") === "participation";
+
+      const requestedByStorage =
+        localStorage.getItem("17_open_participation") === "true";
+
+      // لا نفتح الاستمارة إذا لم يطلب المستخدم المشاركة
+      if (!requestedByUrl && !requestedByStorage) return;
+      setShowParticipation(true);
+      setShowLogin(false);
+
+      // إزالة علامة المشاركة بعد استخدامها
+      localStorage.removeItem("17_open_participation");
+
+      if (requestedByUrl) {
+        url.searchParams.delete("flow");
+
+        window.history.replaceState(
+          {},
+          "",
+          `${url.pathname}${url.search}${url.hash}`
+        );
+      }
+    };
+
     const fetchEvent = async () => {
       const { data, error } = await supabase
         .from("events")
@@ -111,15 +142,8 @@ function App() {
       const currentUser = data.session?.user ?? null;
       setUser(currentUser);
 
-      // إذا عاد المستخدم بعد طلب المشاركة، نعرض الاستمارة
-      if (
-        currentUser &&
-        localStorage.getItem("17_open_participation") === "true"
-      ) {
-        setShowParticipation(true);
-        setShowLogin(false);
-        localStorage.removeItem("17_open_participation");
-      }
+      openParticipationAfterLogin(currentUser);
+  
     });
 
     // متابعة الدخول والخروج
@@ -130,15 +154,8 @@ function App() {
 
       const currentUser = session?.user ?? null;
       setUser(currentUser);
-
-      if (
-        currentUser &&
-        localStorage.getItem("17_open_participation") === "true"
-      ) {
-        setShowParticipation(true);
-        setShowLogin(false);
-        localStorage.removeItem("17_open_participation");
-      }
+      openParticipationAfterLogin(currentUser);
+      
 
       if (authEvent === "SIGNED_OUT") {
         setShowParticipation(false);
@@ -180,7 +197,7 @@ function App() {
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
         options: {
-          emailRedirectTo: window.location.origin,
+         emailRedirectTo: `${window.location.origin}/?flow=participation`,
         },
       });
 
@@ -423,16 +440,18 @@ if (error) {
       {/* لا تظهر استمارة المشاركة إلا بعد تسجيل الدخول وطلب المشاركة */}
      
      {showParticipation && user && (
-  <Suspense
-    fallback={
-      <div className="py-10 text-center text-gray-500">
-        جارٍ تحميل استمارة المشاركة...
-      </div>
-    }
-  >
-    <ParticipationForm event={event} />
-  </Suspense>
-)}
+        <div id="participation-form" className="scroll-mt-8">
+          <Suspense
+            fallback={
+              <div className="py-10 text-center text-gray-500">
+                جارٍ تحميل استمارة المشاركة...
+              </div>
+            }
+          >
+            <ParticipationForm event={event} />
+          </Suspense>
+        </div>
+      )}
           </main>
         }
       />

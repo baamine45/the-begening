@@ -17,6 +17,7 @@ function ParticipationForm({ event }) {
   const [audioUrl, setAudioUrl] = useState("");
   const [audioBlob, setAudioBlob] = useState(null);
 
+  const formSectionRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
 
@@ -46,6 +47,19 @@ function ParticipationForm({ event }) {
     };
   }, [audioUrl]);
 
+  // الانتقال إلى الاستمارة بعد تحميل مكوّنها فعليًا، لا قبل انتهاء التحميل الكسول.
+  useEffect(() => {
+    const scrollTimer = window.setTimeout(() => {
+      const formSection = formSectionRef.current;
+      if (!formSection) return;
+
+      const top = formSection.getBoundingClientRect().top + window.scrollY - 16;
+      window.scrollTo({ top, behavior: "smooth" });
+    }, 250);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, []);
+
   // بدء التسجيل الصوتي
   const startRecording = async () => {
     setSubmitError("");
@@ -70,23 +84,7 @@ function ParticipationForm({ event }) {
       setAudioBlob(null);
       audioChunksRef.current = [];
 
-
-      // const recorder = new MediaRecorder(stream);
-     const supportedAudioTypes = [
-  "audio/webm",
-  "audio/mp4",
-  "audio/ogg",
-];
-
-const preferredAudioType = supportedAudioTypes.find((type) =>
-  MediaRecorder.isTypeSupported(type)
-);
-
-const recorder = preferredAudioType
-  ? new MediaRecorder(stream, { mimeType: preferredAudioType })
-  : new MediaRecorder(stream);
-
-console.log("صيغة التسجيل الصوتي:", recorder.mimeType);
+      const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
 
       // جمع أجزاء الصوت أثناء التسجيل
@@ -180,7 +178,7 @@ console.log("صيغة التسجيل الصوتي:", recorder.mimeType);
   // رفع ملف إلى الـ Bucket الخاص بالمشاركات، داخل مجلد المستخدم نفسه
   const uploadContributionFile = async (file, userId, eventId, kind) => {
     if (!file) return null;
-        if (!file) return null;
+
     const fallbackExtension = kind === "photo" ? "jpg" : "webm";
     const extension = getFileExtension(file, fallbackExtension);
     const filePath = `${userId}/${eventId}/${crypto.randomUUID()}-${kind}.${extension}`;
@@ -374,6 +372,8 @@ console.log("صيغة التسجيل الصوتي:", recorder.mimeType);
 
   return (
     <section
+      ref={formSectionRef}
+      id="participation-form-content"
       dir="rtl"
       className="min-h-screen bg-[#F8F5F0] px-6 py-24 text-[#252525]"
     >

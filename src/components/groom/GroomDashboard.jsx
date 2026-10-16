@@ -372,20 +372,28 @@ if (fetchError) {
   return (
     <main
       dir="rtl"
-      className="min-h-screen bg-[#F8F5F0] px-6 py-24 text-[#252525]"
+      className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#fffdf8] via-[#F8F5F0] to-[#f0e8da] px-4 py-8 text-[#252525] sm:px-6 sm:py-12 lg:py-16"
     >
       <div className="mx-auto max-w-5xl">
-        {/* زر تسجيل الخروج */}
-        <div className="mb-8 flex justify-end">
+        {/* شريط التنقل: العودة إلى الصفحة الرئيسية أو تسجيل الخروج */}
+        <nav className="mb-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#C9A96E]/20 bg-white/80 p-3 shadow-sm backdrop-blur sm:p-4">
+          <button
+            type="button"
+            onClick={() => navigate("/")}
+            className="inline-flex items-center gap-2 rounded-xl border border-[#C9A96E]/40 px-4 py-2.5 text-sm text-[#765821] transition hover:border-[#C9A96E] hover:bg-[#C9A96E]/10 focus:outline-none focus:ring-2 focus:ring-[#C9A96E]/40"
+          >
+            <span aria-hidden="true">←</span>
+            العودة إلى الصفحة الرئيسية
+          </button>
           <button
             type="button"
             onClick={handleLogout}
             disabled={loggingOut}
-            className="border border-[#252525]/20 px-5 py-3 text-sm transition hover:bg-[#C9A96E] hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-xl border border-[#252525]/15 px-4 py-2.5 text-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loggingOut ? "جارٍ تسجيل الخروج..." : "تسجيل الخروج"}
           </button>
-        </div>
+        </nav>
 
         {logoutError && (
           <p
@@ -396,42 +404,49 @@ if (fetchError) {
           </p>
         )}
 
-        <p className="text-sm tracking-[0.2em] text-[#C9A96E]">
-          17 — البداية
-        </p>
+        <header className="relative overflow-hidden rounded-3xl border border-[#C9A96E]/25 bg-white/80 px-6 py-10 shadow-sm sm:px-10 sm:py-14">
+          <div aria-hidden="true" className="absolute -left-8 -top-12 h-40 w-40 rounded-full border border-[#C9A96E]/20" />
+          <div aria-hidden="true" className="absolute -left-2 -top-6 h-28 w-28 rounded-full border border-[#C9A96E]/20" />
+          <p className="relative text-xs font-medium tracking-[0.25em] text-[#9A793F] sm:text-sm">
+            17 — البداية
+          </p>
 
-        <h1 className="mt-4 text-4xl font-light md:text-5xl">
-          مساحة العريس
-        </h1>
+          <h1 className="relative mt-4 text-4xl font-light leading-tight text-[#252525] sm:text-5xl md:text-6xl">
+            مساحة العريس
+          </h1>
 
-        <p className="mt-6 max-w-2xl leading-loose text-gray-600">
+          <div className="mt-5 h-px w-20 bg-[#C9A96E]" />
+          <p className="relative mt-5 max-w-2xl text-base leading-loose text-gray-600 sm:text-lg">
           بعض الكلمات تستحق أن تصل في وقتها المناسب،
           وبعض الذكريات تصبح أجمل حين نكتشفها معًا.
-        </p>
-{/* ملخص المساهمات */}
-<div className="mt-10 grid grid-cols-1 gap-4 sm:grid-cols-3">
-  <div className="border border-[#252525]/10 bg-white p-5">
+          </p>
+          <p className="relative mt-6 text-sm text-[#9A793F]">17 أكتوبر 2026 · يوم تُروى فيه الحكايات الجميلة</p>
+        </header>
+
+        {/* ملخص المساهمات */}
+        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <div className="rounded-2xl border border-[#252525]/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <p className="text-sm text-gray-500">إجمالي الرسائل المعتمدة</p>
     <p className="mt-3 text-3xl font-light">
       {totalMessages}
     </p>
   </div>
 
-  <div className="border border-[#252525]/10 bg-white p-5">
+  <div className="rounded-2xl border border-[#252525]/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <p className="text-sm text-gray-500">متاحة للزوار</p>
     <p className="mt-3 text-3xl font-light text-green-700">
       {publicMessagesCount}
     </p>
   </div>
 
-  <div className="border border-[#252525]/10 bg-white p-5">
+  <div className="rounded-2xl border border-[#252525]/10 bg-white p-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
     <p className="text-sm text-gray-500">رسائل خاصة</p>
     <p className="mt-3 text-3xl font-light text-[#9A6B22]">
       {privateMessagesCount}
     </p>
   </div>
 </div>
-        <section className="mt-12 border border-[#252525]/10 bg-white p-8 md:p-10">
+        <section className="mt-8 rounded-3xl border border-[#C9A96E]/20 bg-white p-5 shadow-sm sm:p-8 md:p-10">
           <p className="mb-4 text-sm tracking-widest text-[#C9A96E]">
             من الأحبة
           </p>
@@ -553,7 +568,7 @@ if (fetchError) {
                 return (
                   <article
                     key={item.id}
-                    className="border border-[#252525]/10 p-6 transition hover:shadow-md"
+                    className="rounded-2xl border border-[#252525]/10 bg-gradient-to-br from-white to-[#fffdf8] p-5 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#C9A96E]/40 hover:shadow-md sm:p-7"
                   >
 
 {/* رأس البطاقة: اسم المشارك وتاريخ المساهمة */}
@@ -704,7 +719,7 @@ if (fetchError) {
           )}
         </section>
 
-        <p className="mt-10 text-center text-sm leading-loose text-gray-500">
+        <p className="mt-8 rounded-2xl border border-[#C9A96E]/20 bg-white/60 px-5 py-6 text-center text-sm leading-loose text-gray-500">
           الذكريات الجميلة لا تُقاس بعددها، بل بالأثر الذي تتركه في القلب.
         </p>
       </div>
