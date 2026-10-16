@@ -152,6 +152,8 @@ function Timeline() {
 
           id: memory.id,
 
+          section: memory.section,
+
           year: memory.year_label || "",
 
           title: memory.title,
@@ -518,255 +520,114 @@ setLoadError(
 
 
 
-      {/* بطاقات مستقلة، دون خط زمني عمودي */}
+      {/* تجميع الذكريات حسب القسم والسنة الدراسية مع الحفاظ على ترتيب المشرف */}
+      {(() => {
+        const groups = [];
+        const groupIndexes = new Map();
 
-      <div className="relative mx-auto max-w-5xl space-y-12 md:space-y-16">
-
-        {items.map((item, index) => {
-
-          const images = normalizeImages(item.images, item.title);
-
+        items.forEach((item, itemIndex) => {
           const year = String(item.year || "").trim();
-
-
-
-          return (
-
-            <article
-
-              key={item.id || `${item.title}-${index}`}
-
-              className="overflow-hidden rounded-2xl border border-white/10 bg-[#1D1D1D] shadow-xl shadow-black/10 transition-colors duration-500 hover:border-[#C9A96E]/30 md:rounded-3xl"
-
-            >
-
-              {/* الصور في أعلى البطاقة */}
-
-              {images.length > 0 && (
-
-                <div className="grid grid-cols-2 gap-1.5 bg-black/20 p-1.5 md:gap-2 md:p-2">
-
-                  {images.slice(0, 4).map((image, imageIndex) => {
-
-                    // الصورة الأولى أكبر، والبقية تكمل المعرض.
-
-                    const featured = imageIndex === 0;
-
-
-
-                    return (
-
-                      <button
-
-                        key={image.id || `${item.title}-${imageIndex}`}
-
-                        type="button"
-
-                        onClick={() =>
-
-                          setLightbox({
-
-                            images,
-
-                            index: imageIndex,
-
-                            title: item.title,
-
-                          })
-
-                        }
-
-                        aria-label={`فتح الصورة ${imageIndex + 1} من ${item.title}`}
-
-                        className={`group relative overflow-hidden rounded-lg bg-white/5 focus:outline-none focus:ring-2 focus:ring-[#C9A96E] md:rounded-xl ${
-
-                          featured
-
-                            ? "col-span-2 aspect-[16/9] md:col-span-1 md:row-span-2 md:aspect-auto md:min-h-[360px]"
-
-                            : "aspect-[4/3] md:aspect-[5/4]"
-
-                        }`}
-
-                      >
-
-                        <img
-
-                          src={image.url}
-
-                          alt={image.alt_text}
-
-                          loading="lazy"
-
-                          className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105"
-
-                        />
-
-
-
-                        <span className="absolute inset-0 bg-black/0 transition-colors duration-300 group-hover:bg-black/20" />
-
-
-
-                        <span className="absolute bottom-3 right-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
-
-                          <svg
-
-                            viewBox="0 0 24 24"
-
-                            fill="none"
-
-                            stroke="currentColor"
-
-                            strokeWidth="1.5"
-
-                            className="h-5 w-5"
-
-                            aria-hidden="true"
-
-                          >
-
-                            <circle cx="11" cy="11" r="6.5" />
-
-                            <path d="m16 16 4 4 M11 8v6 M8 11h6" />
-
-                          </svg>
-
-                        </span>
-
-                      </button>
-
-                    );
-
-                  })}
-
-
-
-                  {/* إذا كانت هناك صور إضافية، نفتح المعرض من آخر صورة ظاهرة */}
-
-                  {images.length > 4 && (
-
-                    <button
-
-                      type="button"
-
-                      onClick={() =>
-
-                        setLightbox({
-
-                          images,
-
-                          index: 4,
-
-                          title: item.title,
-
-                        })
-
-                      }
-
-                      className="col-span-2 rounded-lg py-3 text-sm text-[#C9A96E] transition hover:bg-white/5 md:rounded-xl"
-
-                    >
-
-                      عرض بقية الصور ({images.length - 4})
-
-                    </button>
-
-                  )}
-
-                </div>
-
-              )}
-
-
-
-              {/* معلومات الذكرى */}
-
-              <div className="p-6 md:p-10 lg:p-12">
-
-                {/* لا يظهر حقل السنة إطلاقًا إذا كان فارغًا */}
-
-                {year && (
-
-                  <p
-
-                    dir="ltr"
-
-                    className="mb-3 text-sm tracking-[0.2em] text-[#C9A96E]"
-
-                  >
-
-                    {year}
-
-                  </p>
-
-                )}
-
-
-
-                <h3 className="text-2xl font-light leading-relaxed md:text-3xl">
-
-                  {item.title}
-
-                </h3>
-
-
-
-                {item.description && (
-
-                  <p className="mt-4 max-w-3xl text-sm leading-8 text-gray-400 md:text-base md:leading-9">
-
-                    {item.description}
-
-                  </p>
-
-                )}
-
-
-
-                {images.length > 0 && (
-
-                  <button
-
-                    type="button"
-
-                    onClick={() =>
-
-                      setLightbox({
-
-                        images,
-
-                        index: 0,
-
-                        title: item.title,
-
-                      })
-
+          const section = item.section || (year ? "secondary" : "after_secondary");
+          const groupLabel = section === "secondary"
+            ? (year || "ذكريات من سنوات الثانوية")
+            : "ما بعد الثانوية";
+          const groupKey = `${section}::${groupLabel}`;
+
+          if (!groupIndexes.has(groupKey)) {
+            groupIndexes.set(groupKey, groups.length);
+            groups.push({ key: groupKey, label: groupLabel, section, items: [] });
+          }
+
+          groups[groupIndexes.get(groupKey)].items.push({ item, itemIndex });
+        });
+
+        return (
+          <div className="relative mx-auto max-w-7xl space-y-14 md:space-y-20">
+            {groups.map((group) => (
+              <section key={group.key} aria-label={group.label}>
+                <header className="mb-6 flex items-center gap-4 md:mb-8">
+                  <span className="h-px flex-1 bg-[#C9A96E]/30" />
+                  <div className="text-center">
+                    <p className="text-xs tracking-[0.2em] text-[#C9A96E]">
+                      {group.section === "secondary" ? "من ذاكرة الثانوية" : "فصل جديد من الحكاية"}
+                    </p>
+                    <h3 className="mt-2 text-xl font-light text-white md:text-2xl">
+                      {group.label}
+                    </h3>
+                  </div>
+                  <span className="h-px flex-1 bg-[#C9A96E]/30" />
+                </header>
+
+                <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:gap-6">
+                  {group.items.map(({ item, itemIndex }) => {
+                    const images = normalizeImages(item.images, item.title);
+                    const year = String(item.year || "").trim();
+
+                    // إذا كانت للذكرى عدة صور، نعرض كل صورة في بطاقة مستقلة ومتناسقة.
+                    if (images.length === 0) {
+                      return (
+                        <article
+                          key={item.id || `${item.title}-${itemIndex}`}
+                          className="h-full overflow-hidden rounded-2xl border border-white/10 bg-[#1D1D1D] p-6 shadow-lg shadow-black/10 transition hover:border-[#C9A96E]/30"
+                        >
+                          {year && <p dir="ltr" className="mb-3 text-sm tracking-wider text-[#C9A96E]">{year}</p>}
+                          <h4 className="text-xl font-light leading-relaxed">{item.title}</h4>
+                          {item.description && <p className="mt-3 whitespace-pre-line break-words text-sm leading-7 text-gray-300">{item.description}</p>}
+                          <p className="mt-4 text-xs text-gray-500">لا توجد صور مرفقة بهذه الذكرى.</p>
+                        </article>
+                      );
                     }
 
-                    className="mt-6 inline-flex items-center gap-2 text-sm text-[#C9A96E] transition hover:text-white"
+                    return images.map((image, imageIndex) => (
+                      <article
+                        key={`${item.id || item.title}-${image.id || imageIndex}`}
+                        className="group overflow-hidden rounded-2xl border border-white/10 bg-[#1D1D1D] shadow-lg shadow-black/10 transition duration-300 hover:-translate-y-1 hover:border-[#C9A96E]/40 hover:shadow-xl hover:shadow-black/20"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setLightbox({ images, index: imageIndex, title: item.title })}
+                          aria-label={`فتح الصورة ${imageIndex + 1} من ${item.title}`}
+                          className="relative block aspect-[4/3] w-full overflow-hidden bg-black/30 text-right focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#C9A96E]"
+                        >
+                          <img
+                            src={image.url}
+                            alt={image.alt_text || item.title}
+                            loading="lazy"
+                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+                          />
+                          <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-70" />
+                          <span className="absolute bottom-3 left-3 flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-black/50 text-white transition group-hover:border-[#C9A96E] group-hover:bg-[#C9A96E] group-hover:text-black">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="h-5 w-5" aria-hidden="true">
+                              <circle cx="11" cy="11" r="6.5" />
+                              <path d="m16 16 4 4 M11 8v6 M8 11h6" />
+                            </svg>
+                          </span>
+                        </button>
 
-                  >
-
-                    <span>استكشف الصور</span>
-
-                    <span aria-hidden="true">←</span>
-
-                  </button>
-
-                )}
-
-              </div>
-
-            </article>
-
-          );
-
-        })}
-
-      </div>
-
-
+                        {/* عنوان الذكرى ووصفها ظاهران أسفل الصورة دون الحاجة إلى فتحها */}
+                        <div className="p-5 md:p-6">
+                          {year && <p dir="ltr" className="mb-2 text-xs tracking-[0.16em] text-[#C9A96E]">{year}</p>}
+                          <h4 className="text-lg font-medium leading-relaxed text-white md:text-xl">{item.title}</h4>
+                          {item.description && (
+                            <p className="mt-3 whitespace-pre-line break-words text-sm leading-7 text-gray-300">
+                              {item.description}
+                            </p>
+                          )}
+                          {images.length > 1 && (
+                            <p className="mt-4 border-t border-white/10 pt-3 text-xs text-gray-500">
+                              الصورة {imageIndex + 1} من {images.length} · اضغط لعرض الصور والتعليقات
+                            </p>
+                          )}
+                        </div>
+                      </article>
+                    ));
+                  })}
+                </div>
+              </section>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* نافذة تكبير الصور */}
 
